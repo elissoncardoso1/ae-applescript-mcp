@@ -64,7 +64,7 @@ function __layerType(l) {
   if (l instanceof ShapeLayer) return 'shape';
   if (l instanceof CameraLayer) return 'camera';
   if (l instanceof LightLayer) return 'light';
-  if (l.nullLayer) return 'null';
+  if (l.nullLayer) return 'null_object';
   if (l.adjustmentLayer) return 'adjustment';
   if (l.source && l.source.mainSource instanceof SolidSource) return 'solid';
   return 'footage';
@@ -158,7 +158,7 @@ if (t === 'text') {
 } else if (t === 'adjustment') {
   l = c.layers.addSolid([1, 1, 1], args.name || 'Adjustment Layer', c.width, c.height, c.pixelAspect);
   l.adjustmentLayer = true;
-} else if (t === 'null') {
+} else if (t === 'null_object') {
   l = c.layers.addNull();
 } else {
   l = c.layers.addShape();

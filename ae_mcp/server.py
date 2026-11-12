@@ -75,7 +75,7 @@ def ae_create_comp(name: Annotated[str, Field(min_length=1)],
 
 
 @mcp.tool(annotations=ADD)
-def ae_add_layer(layer_type: Literal["text", "solid", "null", "adjustment", "shape_rectangle", "shape_ellipse"],
+def ae_add_layer(layer_type: Literal["text", "solid", "null_object", "adjustment", "shape_rectangle", "shape_ellipse"],
                  comp_name: CompName = None, comp_index: CompIndex = None,
                  text: Annotated[str | None, Field(description="Obrigatório para layer_type=text.")] = None,
                  name: str | None = None, color: Hex | None = None,

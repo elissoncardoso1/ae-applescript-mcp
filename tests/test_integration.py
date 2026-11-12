@@ -60,12 +60,12 @@ def test_keyframes_fade_in(comp):
 
 
 def test_shapes_null_adjustment_effect_and_remove(comp):
-    for t in ("shape_rectangle", "shape_ellipse", "null", "adjustment"):
+    for t in ("shape_rectangle", "shape_ellipse", "null_object", "adjustment"):
         s.ae_add_layer(layer_type=t, comp_name=comp, color="#4C6971", width=200, height=200)
     r = s.ae_apply_effect(comp_name=comp, layer_index=1, effect="Gaussian Blur", params={"Blurriness": 12})
     assert "Blurriness" in r["parameters"]
     types = [l["type"] for l in s.ae_inspect_comp(comp_name=comp)["layers"]]
-    assert types == ["adjustment", "null", "shape", "shape"]
+    assert types == ["adjustment", "null_object", "shape", "shape"]
     s.ae_remove_layers(comp_name=comp, layer_indexes=[1, 2])
     assert s.ae_inspect_comp(comp_name=comp)["num_layers"] == 2
 
@@ -85,7 +85,7 @@ def test_errors_are_instructions(comp):
     with pytest.raises(Exception, match="layer_index"):
         s.ae_set_layer_properties(comp_name=comp, changes=[{"layer_index": 99, "opacity": 50}])
     with pytest.raises(Exception, match="Gaussian Blur"):
-        s.ae_add_layer(layer_type="null", comp_name=comp)
+        s.ae_add_layer(layer_type="null_object", comp_name=comp)
         s.ae_apply_effect(comp_name=comp, layer_index=1, effect="Efeito Inventado")
 
 
