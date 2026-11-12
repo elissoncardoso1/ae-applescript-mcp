@@ -21,7 +21,7 @@ mcp = MCPServer("after-effects-applescript", instructions=(
     "Depois de editar, confirme com ae_inspect_comp. Peça confirmação ao usuário antes de "
     "salvar por cima, descartar alterações ou apagar camadas."))
 
-READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+READ = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
 ADD = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
 EDIT = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 DANGER = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False)
