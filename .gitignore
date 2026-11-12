@@ -1,0 +1,5 @@
+docs/recon/evidencias.json
+__pycache__/
+.venv/
+*.egg-info/
+.pytest_cache/
