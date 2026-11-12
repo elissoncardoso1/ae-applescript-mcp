@@ -131,7 +131,7 @@ class Track(BaseModel):
     property: str = Field(description="position|scale|rotation|opacity|anchor_point ou caminho, ex.: 'Effects/Gaussian Blur/Blurriness'")
     keyframes: list[Keyframe] = Field(min_length=1)
     easing: Literal["linear", "ease", "hold"] = "linear"
-    replace_existing: bool = Field(True, description="Apaga os keyframes existentes da propriedade antes.")
+    replace_existing: bool = Field(False, description="true apaga TODOS os keyframes existentes da propriedade antes (só com confirmação se não foram criados nesta conversa).")
 
 
 @mcp.tool(annotations=EDIT)

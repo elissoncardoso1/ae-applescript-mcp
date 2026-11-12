@@ -1,4 +1,5 @@
 """Execução serial de ExtendScript no After Effects via osascript → DoScript."""
+import fcntl
 import json
 import os
 import subprocess
@@ -11,8 +12,11 @@ from .jsx import build_script
 
 NOT_RUNNING = ("O After Effects não está aberto. Abra o After Effects, espere a tela inicial "
                "terminar de carregar e repita a chamada.")
-TIMEOUT = ("O After Effects ainda está processando um script anterior (passou do timeout). "
-           "Espere alguns segundos e repita; se for comum, aumente AE_MCP_TIMEOUT.")
+TIMEOUT = ("O After Effects ainda está processando o script (passou do timeout). A operação continua "
+           "no AE e pode ter sido aplicada: confira com ae_inspect_comp/ae_get_project_overview antes "
+           "de repetir, para não duplicar. Se for comum, aumente AE_MCP_TIMEOUT.")
+STALE = ("O script anterior que passou do timeout não terminou. O servidor parou de esperar por ele. "
+         "Ele pode ter sido aplicado em parte: confira com ae_inspect_comp antes de repetir.")
 REFUSED = ("O After Effects recusou o script: provavelmente há um diálogo/alerta aberto no AE "
            "ou outro script rodando. Feche os diálogos no After Effects e repita.")
 DENIED = ("O macOS bloqueou o controle do After Effects. Em Ajustes do Sistema › Privacidade e "
@@ -34,7 +38,8 @@ class AEError(Exception):
 
 class AERunner:
     def __init__(self, app_path: str, timeout: int = 60, override: bool = True,
-                 exec_fn=_osascript, pending_wait: float | None = None):
+                 exec_fn=_osascript, pending_wait: float | None = None,
+                 lock_path: str = os.path.join(tempfile.gettempdir(), "ae-applescript-mcp.lock")):
         self.timeout, self.override, self._exec = timeout, override, exec_fn
         self.pending_wait = timeout if pending_wait is None else pending_wait
         app = app_path.replace("\\", "\\\\").replace('"', '\\"')
@@ -49,6 +54,7 @@ class AERunner:
             "end run\n")
         self._dir = tempfile.mkdtemp(prefix="ae-mcp-")
         self._lock = threading.Lock()  # o AE executa um script por vez
+        self._lock_path = lock_path  # flock: serializa também entre processos (vários clientes MCP)
         self._pending: str | None = None
 
     def _wait_pending(self):
@@ -57,13 +63,15 @@ class AERunner:
         deadline = time.monotonic() + self.pending_wait
         while not os.path.exists(self._pending):
             if time.monotonic() > deadline:
-                raise AEError(TIMEOUT)
+                self._pending = None  # não prender o servidor para sempre (AE reiniciado, script morto)
+                raise AEError(STALE)
             time.sleep(0.1)
         os.remove(self._pending)
         self._pending = None
 
     def run(self, template: str, args: dict, undo: str | None = None, helpers: str = ""):
-        with self._lock:
+        with self._lock, open(self._lock_path, "a") as lockf:
+            fcntl.flock(lockf, fcntl.LOCK_EX)
             self._wait_pending()
             path = os.path.join(self._dir, uuid.uuid4().hex + ".json")
             script = build_script(template, args, path, undo, helpers)
@@ -83,9 +91,15 @@ class AERunner:
                 raise AEError("Falha ao falar com o After Effects: " + (err.strip().splitlines() or ["?"])[-1])
             if not os.path.exists(path):
                 raise AEError(REFUSED)
-            with open(path, encoding="utf-8") as f:
-                res = json.load(f)
-            os.remove(path)
+            try:
+                with open(path, encoding="utf-8") as f:
+                    res = json.load(f)
+            except (OSError, ValueError):
+                raise AEError("O resultado do After Effects veio incompleto. Confira o estado com "
+                              "ae_inspect_comp antes de repetir.") from None
+            finally:
+                if os.path.exists(path):
+                    os.remove(path)
             if not res.get("ok"):
                 raise AEError("After Effects: " + res["error"]["message"])
             return res.get("data")

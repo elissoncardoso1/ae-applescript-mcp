@@ -44,7 +44,7 @@ var __SHORT = {position: 'ADBE Transform Group/ADBE Position', scale: 'ADBE Tran
   rotation: 'ADBE Transform Group/ADBE Rotate Z', opacity: 'ADBE Transform Group/ADBE Opacity',
   anchor_point: 'ADBE Transform Group/ADBE Anchor Point'};
 function __prop(layer, path) {
-  var parts = (__SHORT[path] || path).split('/'), cur = layer, i, nx;
+  var parts = (__SHORT.hasOwnProperty(path) ? __SHORT[path] : path).split('/'), cur = layer, i, nx;
   for (i = 0; i < parts.length; i++) {
     nx = cur.property(parts[i]);
     if (!nx && parts[i] === 'Effects') nx = cur.property('ADBE Effect Parade');
@@ -86,6 +86,7 @@ function __animated(group, prefix, out, detailed) {
     } else __animated(p, path, out, detailed);
   }
 }
+function __pv(g, mn) { var p = g.property(mn); return p ? __r(p.value) : null; }
 function __params(e) {
   var r = [], i, p;
   for (i = 1; i <= e.numProperties; i++) { p = e.property(i); if (p.propertyType === PropertyType.PROPERTY && p.propertyValueType !== PropertyValueType.NO_VALUE) r.push(p.name); }
@@ -133,10 +134,10 @@ var c = __comp(args), L = [], lim = 100, i, j, l, o, tr, td, fx, anim;
 for (i = 1; i <= c.numLayers && i <= lim; i++) {
   l = c.layer(i); tr = l.property('ADBE Transform Group');
   o = {index: i, name: l.name, type: __layerType(l), enabled: l.enabled, in_point: __r(l.inPoint), out_point: __r(l.outPoint),
-       position: __r(tr.property('ADBE Position').value), opacity: __r(tr.property('ADBE Opacity').value)};
+       position: __pv(tr, 'ADBE Position'), opacity: __pv(tr, 'ADBE Opacity')};
   if (l.parent) o.parent_index = l.parent.index;
   if (args.detailed && o.type === 'solid') o.color = __hex(l.source.mainSource.color);
-  if (args.detailed) { o.scale = __r(tr.property('ADBE Scale').value); o.rotation = __r(tr.property('ADBE Rotate Z').value); o.anchor_point = __r(tr.property('ADBE Anchor Point').value); }
+  if (args.detailed) { o.scale = __pv(tr, 'ADBE Scale'); o.rotation = __pv(tr, 'ADBE Rotate Z'); o.anchor_point = __pv(tr, 'ADBE Anchor Point'); }
   if (l instanceof TextLayer) {
     td = l.property('ADBE Text Properties').property('ADBE Text Document').value;
     o.text = td.text; o.font_size = __r(td.fontSize);
@@ -219,24 +220,25 @@ return {updated: out};
 """
 
 SET_KEYFRAMES = r"""
-var c = __comp(args), res = [], i, j, tk, l, p, kf, val, td, n, e, eases, interp;
+var c = __comp(args), res = [], i, j, tk, l, p, kf, val, td, n, e, eases, interp, vt, touched;
 for (i = 0; i < args.tracks.length; i++) {
-  tk = args.tracks[i]; l = __layer(c, tk.layer_index); p = __prop(l, tk.property);
+  tk = args.tracks[i]; l = __layer(c, tk.layer_index); p = __prop(l, tk.property); vt = p.propertyValueType;
   if (!p.canVaryOverTime) __err("'" + tk.property + "' não aceita keyframes.");
-  if (tk.replace_existing !== false) while (p.numKeys > 0) p.removeKey(1);
+  if (tk.replace_existing === true) while (p.numKeys > 0) p.removeKey(1);
   for (j = 0; j < tk.keyframes.length; j++) {
     kf = tk.keyframes[j]; val = kf.value;
-    if (p.propertyValueType === PropertyValueType.TEXT_DOCUMENT) { td = p.valueAtTime(kf.time, true); td.text = String(val); val = td; }
-    else if (p.propertyValueType === PropertyValueType.COLOR && typeof val === 'string') val = __rgb(val).concat([1]);
+    if (vt === PropertyValueType.TEXT_DOCUMENT) { td = p.valueAtTime(kf.time, true); td.text = String(val); val = td; }
+    else if (vt === PropertyValueType.COLOR && typeof val === 'string') val = __rgb(val).concat([1]);
     p.setValueAtTime(kf.time, val);
   }
+  touched = [];  // só os keyframes desta chamada recebem easing; os do usuário ficam intactos
+  for (j = 0; j < tk.keyframes.length; j++) touched.push(p.nearestKeyIndex(tk.keyframes[j].time));
   interp = tk.easing === 'hold' ? KeyframeInterpolationType.HOLD : (tk.easing === 'linear' ? KeyframeInterpolationType.LINEAR : KeyframeInterpolationType.BEZIER);
-  for (j = 1; j <= p.numKeys; j++) {
-    if (tk.easing === 'ease' && p.propertyValueType !== PropertyValueType.TEXT_DOCUMENT) {
-      n = (p.propertyValueType === PropertyValueType.TwoD_SPATIAL || p.propertyValueType === PropertyValueType.ThreeD_SPATIAL || !(p.value instanceof Array)) ? 1 : p.value.length;
-      eases = []; for (e = 0; e < n; e++) eases.push(new KeyframeEase(0, 33.33));
-      p.setTemporalEaseAtKey(j, eases, eases);
-    } else if (p.propertyValueType !== PropertyValueType.TEXT_DOCUMENT) p.setInterpolationTypeAtKey(j, interp, interp);
+  n = vt === PropertyValueType.TwoD ? 2 : (vt === PropertyValueType.ThreeD ? 3 : 1);  // guia de scripting: 2D=2, 3D=3, demais=1
+  for (j = 0; j < touched.length; j++) {
+    if (vt === PropertyValueType.TEXT_DOCUMENT) continue;
+    if (tk.easing === 'ease') { eases = []; for (e = 0; e < n; e++) eases.push(new KeyframeEase(0, 33.33)); p.setTemporalEaseAtKey(touched[j], eases, eases); }
+    else p.setInterpolationTypeAtKey(touched[j], interp, interp);
   }
   res.push({layer_index: l.index, layer: l.name, property: p.name, num_keys: p.numKeys});
 }
@@ -257,7 +259,9 @@ return {layer_index: l.index, layer: l.name, effect: e.name, match_name: e.match
 """
 
 REMOVE_LAYERS = r"""
-var c = __comp(args), idx = args.layer_indexes.slice(0).sort(function (a, b) { return b - a; }), out = [], i, l;
+var c = __comp(args), seen = {}, idx = [], out = [], i, l;
+for (i = 0; i < args.layer_indexes.length; i++) if (!seen[args.layer_indexes[i]]) { seen[args.layer_indexes[i]] = true; idx.push(args.layer_indexes[i]); }
+idx.sort(function (a, b) { return b - a; });
 for (i = 0; i < idx.length; i++) __layer(c, idx[i]);
 for (i = 0; i < idx.length; i++) { l = c.layer(idx[i]); out.push(l.name); l.remove(); }
 return {removed: out, num_layers: c.numLayers};

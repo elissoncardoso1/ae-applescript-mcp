@@ -29,7 +29,7 @@ O servidor envia ExtendScript ao AE já aberto e lê o resultado de volta. Todo 
 | Fade de N s no fim | o keyframe final vai em `duration - 1/fps` (último frame) e o inicial em `duration - N`. Ex.: 4 s a 30 fps, meio segundo → 3.5 e 3.967 |
 | Numa propriedade animada, o campo `opacity` (ou `position`) do inspect é o valor no tempo atual | confira a animação em `animated[].keyframes`, não nesses campos |
 | Caminhos em /tmp voltam como /private/tmp | é o mesmo lugar no macOS; compare pelo nome do arquivo |
-| Propriedade com keyframes não aceita valor estático | use `ae_set_keyframes`, que por padrão substitui os keyframes existentes |
+| Propriedade com keyframes não aceita valor estático | use `ae_set_keyframes`. Por padrão ele **acrescenta** (keyframes no mesmo tempo são sobrescritos). `replace_existing:true` apaga todos os anteriores; só use em animação criada nesta conversa ou com confirmação |
 | O render **nunca** é iniciado pelo servidor | depois de `ae_queue_render`, diga ao usuário para clicar em Render no AE |
 
 ## 3. Receitas

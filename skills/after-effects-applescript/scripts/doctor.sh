@@ -21,7 +21,7 @@ if [ "$(osascript -e "application \"$APP\" is running" 2>/dev/null)" != true ]; 
 fi
 ok "After Effects aberto"
 
-OUT=$(mktemp -t ae-doctor).json
+OUT=$(mktemp "${TMPDIR:-/tmp}/ae-doctor.XXXXXX")
 RES=$(osascript - "var f=new File('$OUT'); f.open('w'); f.write(app.version + '|' + app.project.numItems + '|' + app.project.dirty); f.close();" <<OSA 2>&1
 on run argv
   with timeout of 20 seconds

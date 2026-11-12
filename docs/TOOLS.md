@@ -669,8 +669,8 @@ keyframes=[{time:0,value:0},{time:1,value:100}], easing='ease'.
           "type": "string"
         },
         "replace_existing": {
-          "default": true,
-          "description": "Apaga os keyframes existentes da propriedade antes.",
+          "default": false,
+          "description": "true apaga TODOS os keyframes existentes da propriedade antes (só com confirmação se não foram criados nesta conversa).",
           "title": "Replace Existing",
           "type": "boolean"
         }

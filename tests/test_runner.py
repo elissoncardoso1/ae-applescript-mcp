@@ -66,7 +66,7 @@ def test_timeout_blocks_next_call_until_pending_finishes():
     r = make(fake, pending_wait=0.2)
     with pytest.raises(AEError, match="ainda está processando"):
         r.run("return 1;", {})
-    with pytest.raises(AEError, match="ainda está processando"):
+    with pytest.raises(AEError, match="não terminou"):
         r.run("return 1;", {})
     assert len(fake.calls) == 1  # a segunda chamada não foi enviada ao AE
 
@@ -79,3 +79,40 @@ def test_pending_cleared_when_late_result_arrives():
     open(r._pending, "w").write('{"ok": true, "data": null}')
     fake.rc, fake.stderr, fake.result = 0, "", {"ok": True, "data": 7}
     assert r.run("return 7;", {}) == 7
+
+
+def test_stale_pending_is_cleared_after_wait_expires():
+    fake = FakeOsa(rc=1, stdout="", stderr="(-1712)")
+    r = make(fake, pending_wait=0.1)
+    with pytest.raises(AEError):
+        r.run("return 1;", {})
+    with pytest.raises(AEError, match="ae_inspect_comp"):  # 2ª: avisa e libera
+        r.run("return 1;", {})
+    fake.rc, fake.stderr, fake.result = 0, "", {"ok": True, "data": 1}
+    assert r.run("return 1;", {}) == 1  # 3ª: servidor não fica preso para sempre
+
+
+def test_timeout_message_warns_operation_may_have_applied():
+    with pytest.raises(AEError, match="pode ter sido aplicad"):
+        make(FakeOsa(rc=1, stdout="", stderr="(-1712)")).run("return 1;", {})
+
+
+@pytest.mark.parametrize("stderr,msg", [("(-128)", "recusou"), ("(-600)", "Abra o After Effects"), ("boom (-2700)", "Falha ao falar")])
+def test_osascript_error_mapping(stderr, msg):
+    with pytest.raises(AEError, match=msg):
+        make(FakeOsa(rc=1, stdout="", stderr=stderr)).run("return 1;", {})
+
+
+def test_corrupt_result_file_becomes_aeerror():
+    fake = FakeOsa(result=None)
+    def write_garbage(argv, stdin, timeout):
+        path = re.search(r'new File\("([^"]+)"\)', argv[2]).group(1)
+        open(path, "w").write("{trunc")
+        return 0, "0", ""
+    with pytest.raises(AEError):
+        make(write_garbage).run("return 1;", {})
+
+
+def test_lock_is_shared_across_processes(tmp_path):
+    r = make(FakeOsa(result={"ok": True, "data": 1}), lock_path=str(tmp_path / "ae.lock"))
+    assert r.run("return 1;", {}) == 1 and (tmp_path / "ae.lock").exists()
