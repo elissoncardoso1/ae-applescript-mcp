@@ -53,7 +53,7 @@ async def t1_taal(c):
     await call(c, "ae_set_keyframes", comp_name="TAAL 10 anos", tracks=[
         {"layer_index": 1, "property": "opacity", "easing": "ease",
          "keyframes": [{"time": 0, "value": 0}, {"time": 1, "value": 100}]}])
-    await call(c, "ae_queue_render", comp_name="TAAL 10 anos", output_path=f"{OUT}/taal.mov")
+    await call(c, "ae_queue_render", comp_name="TAAL 10 anos", output_path=f"{OUT}/taal.mp4")
     comp = await call(c, "ae_inspect_comp", comp_name="TAAL 10 anos", response_format="detailed")
     L = comp["layers"][0]
     check((comp["width"], comp["height"], comp["duration"]) == (1080, 1920, 10), "dimensões")

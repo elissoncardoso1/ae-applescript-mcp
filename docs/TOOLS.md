@@ -226,7 +226,6 @@ com justification='center' e center_anchor=true.
     "color": {
       "anyOf": [
         {
-          "description": "Cor #RRGGBB, ex.: #F05378",
           "pattern": "^#[0-9A-Fa-f]{6}$",
           "type": "string"
         },
@@ -235,6 +234,7 @@ com justification='center' e center_anchor=true.
         }
       ],
       "default": null,
+      "description": "#RRGGBB: cor do sólido/shape ou do preenchimento do texto",
       "title": "Color"
     },
     "width": {

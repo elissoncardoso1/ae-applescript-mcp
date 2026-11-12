@@ -91,6 +91,15 @@ function __params(e) {
   for (i = 1; i <= e.numProperties; i++) { p = e.property(i); if (p.propertyType === PropertyType.PROPERTY && p.propertyValueType !== PropertyValueType.NO_VALUE) r.push(p.name); }
   return r;
 }
+function __effectInfo(e) {
+  var o = {name: e.name, match_name: e.matchName, params: {}}, i, p;
+  for (i = 1; i <= e.numProperties; i++) {
+    p = e.property(i);
+    if (p.propertyType !== PropertyType.PROPERTY || p.propertyValueType === PropertyValueType.NO_VALUE) continue;
+    try { o.params[p.name] = p.propertyValueType === PropertyValueType.COLOR ? __hex(p.value) : __r(p.value); } catch (x) {}
+  }
+  return o;
+}
 function __guardDirty(a) {
   if (app.project.dirty && !a.discard_unsaved_changes) __err("O projeto atual tem alterações não salvas. Salve antes com ae_save_project_as ou, SOMENTE com a confirmação do usuário, repita com discard_unsaved_changes=true.");
 }
@@ -126,6 +135,7 @@ for (i = 1; i <= c.numLayers && i <= lim; i++) {
   o = {index: i, name: l.name, type: __layerType(l), enabled: l.enabled, in_point: __r(l.inPoint), out_point: __r(l.outPoint),
        position: __r(tr.property('ADBE Position').value), opacity: __r(tr.property('ADBE Opacity').value)};
   if (l.parent) o.parent_index = l.parent.index;
+  if (args.detailed && o.type === 'solid') o.color = __hex(l.source.mainSource.color);
   if (args.detailed) { o.scale = __r(tr.property('ADBE Scale').value); o.rotation = __r(tr.property('ADBE Rotate Z').value); o.anchor_point = __r(tr.property('ADBE Anchor Point').value); }
   if (l instanceof TextLayer) {
     td = l.property('ADBE Text Properties').property('ADBE Text Document').value;
@@ -133,7 +143,8 @@ for (i = 1; i <= c.numLayers && i <= lim; i++) {
     if (args.detailed) { o.font = td.font; try { o.fill_color = __hex(td.fillColor); } catch (e) {} o.justification = td.justification === ParagraphJustification.CENTER_JUSTIFY ? 'center' : (td.justification === ParagraphJustification.RIGHT_JUSTIFY ? 'right' : 'left'); }
   }
   fx = l.property('ADBE Effect Parade');
-  if (fx && fx.numProperties) { o.effects = []; for (j = 1; j <= fx.numProperties; j++) o.effects.push(fx.property(j).name); }
+  if (fx && fx.numProperties) { o.effects = []; for (j = 1; j <= fx.numProperties; j++) o.effects.push(args.detailed ? __effectInfo(fx.property(j)) : fx.property(j).name); }
+  if (args.detailed && (l instanceof TextLayer || l instanceof ShapeLayer)) { var sr = l.sourceRectAtTime(Math.max(l.inPoint, 0), false); o.size = __r([sr.width * tr.property('ADBE Scale').value[0] / 100, sr.height * tr.property('ADBE Scale').value[1] / 100]); }
   anim = []; __animated(l, '', anim, args.detailed); if (anim.length) o.animated = anim;
   L.push(o);
 }
@@ -153,6 +164,10 @@ var c = __comp(args), t = args.layer_type, l, w = args.width || c.width, h = arg
 if (t === 'text') {
   if (!args.text) __err("layer_type 'text' exige o campo text. Ex.: {\"layer_type\": \"text\", \"text\": \"Olá\"}");
   l = c.layers.addText(args.text);
+  if (args.color) {
+    var sp = l.property('ADBE Text Properties').property('ADBE Text Document'), td = sp.value;
+    td.applyFill = true; td.fillColor = __rgb(args.color); sp.setValue(td);
+  }
 } else if (t === 'solid') {
   l = c.layers.addSolid(__rgb(args.color || '#FFFFFF'), args.name || 'Solid', w, h, c.pixelAspect);
 } else if (t === 'adjustment') {
@@ -263,6 +278,12 @@ if (args.output_module_template) {
   catch (e2) { var t = om.templates.join(', '); rq.remove(); __err("Template de saída '" + args.output_module_template + "' não existe. Disponíveis: " + t); }
 }
 om.file = f;
+var want = (f.name.match(/\.[^.]+$/) || [''])[0].toLowerCase(), got = (om.file.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+if (want !== got) {
+  var ot = om.templates.join(', '), used = om.name;
+  rq.remove();
+  __err("O template de saída '" + used + "' gera '" + got + "', não '" + want + "'. Nada foi enfileirado. Repita com output_module_template de um formato que gere " + want + " (disponíveis: " + ot + ") ou mude a extensão de output_path para " + got + ".");
+}
 return {rq_index: app.project.renderQueue.numItems, comp: c.name, status: __rqStatus(rq.status), output: om.file.fsName,
         note: 'Enfileirado, mas o render NÃO foi iniciado. O usuário renderiza no After Effects (botão Render) ou pelo aerender.'};
 """

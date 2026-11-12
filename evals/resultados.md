@@ -26,3 +26,11 @@ Execução: `uv run python evals/run_evals.py`, com o AE 27.0.0 aberto. Cliente 
 
 - Uma camada nova entra em `layer_index` 1 e empurra as outras para baixo. As tarefas t2 e t5 dependem disso; a skill precisa deixar isso claro.
 - O valor de keyframe `"3"` pode virar o número 3 pelo mesmo pré-parse. Para Source Text isso não importa (o template converte com `String`), mas `"1.0"` viraria `"1"`.
+
+## Teste da skill (Fase 7)
+
+| Rodada | Agente | Tarefas | Resultado (verificado por mim lendo o projeto) | O que mudou depois |
+|---|---|---|---|---|
+| RED (sem skill) | só o harness e `list` | "Story": texto centralizado, fade in/out, fundo, render .mov | requisitos atendidos, mas com 2 itens na fila de render (.mp4 indesejado) e adivinhações | **servidor:** `ae_queue_render` passou a recusar a troca silenciosa de extensão; `color` agora pinta o texto; inspect mostra a cor do sólido. **skill:** ordem das camadas, `comp_name` em vez de índice, último frame, tamanho da fonte |
+| GREEN (com skill) | só a SKILL.md | A (TAAL 10 anos + render), B (blur animado + Fill), C (3 palavras em sequência) | **3/3**, sem nenhum erro de ferramenta | **servidor:** o inspect detailed mostra os parâmetros dos efeitos e o tamanho do texto. **skill:** opacidade do Fill para "sobrepor/tingir", receita de sequência centralizada, separação de fade-in e fade-out, cor padrão do texto, /private/tmp |
+| REFACTOR | só a SKILL.md revisada | "Abertura": tingido leve, texto grande que cabe, fade-out no último meio segundo | **1/1**, sem erros; Fill Opacity 0.3, texto com 1204 px de 1920 | escala "levemente/tingido/forte", alvo de largura do texto (70–90%), início do fade-out, campo estático vs `animated` |

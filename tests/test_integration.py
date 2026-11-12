@@ -71,7 +71,7 @@ def test_shapes_null_adjustment_effect_and_remove(comp):
 
 
 def test_queue_render_and_save(comp, tmp_path):
-    q = s.ae_queue_render(comp_name=comp, output_path=str(tmp_path / "out.mov"))
+    q = s.ae_queue_render(comp_name=comp, output_path=str(tmp_path / "out.mp4"))
     assert q["comp"] == comp and q["status"] == "QUEUED"
     p = str(tmp_path / "proj.aep")
     assert s.ae_save_project_as(path=p)["saved"].endswith("proj.aep")
@@ -92,3 +92,28 @@ def test_errors_are_instructions(comp):
 def test_run_extendscript_disabled_by_default():
     with pytest.raises(Exception, match="AE_MCP_ENABLE_RUN_EXTENDSCRIPT"):
         s.ae_run_extendscript(code="return 1;")
+
+
+def test_queue_render_refuses_silent_extension_change(comp, tmp_path):
+    # o template padrão do AE 2027 gera .mp4; pedir .mov não pode virar .mp4 em silêncio
+    with pytest.raises(Exception, match="output_module_template"):
+        s.ae_queue_render(comp_name=comp, output_path=str(tmp_path / "x.mov"))
+    assert all(r["comp"] != comp for r in s.ae_get_project_overview()["render_queue"])  # nada sobrou na fila
+
+
+def test_text_color_param_and_solid_color_readback(comp):
+    s.ae_add_layer(layer_type="solid", color="#26326E", comp_name=comp)
+    s.ae_add_layer(layer_type="text", text="Oi", color="#F05378", comp_name=comp)
+    L = s.ae_inspect_comp(comp_name=comp, response_format="detailed")["layers"]
+    assert L[0]["fill_color"] == "#F05378" and L[1]["color"] == "#26326E"
+
+
+def test_detailed_inspect_shows_effect_params_and_text_size(comp):
+    s.ae_add_layer(layer_type="solid", color="#4C6971", comp_name=comp)
+    s.ae_apply_effect(comp_name=comp, layer_index=1, effect="ADBE Fill", params={"Color": "#F05378", "Opacity": 0.4})
+    s.ae_add_layer(layer_type="text", text="Largura", comp_name=comp)
+    L = s.ae_inspect_comp(comp_name=comp, response_format="detailed")["layers"]
+    fill = L[1]["effects"][0]
+    assert fill["name"] == "Fill" and fill["params"]["Color"] == "#F05378" and fill["params"]["Opacity"] == 0.4
+    assert L[0]["size"][0] > 0  # largura visual do texto, para checar se cabe na comp
+    assert s.ae_inspect_comp(comp_name=comp)["layers"][1]["effects"] == ["Fill"]  # concise continua só nomes
