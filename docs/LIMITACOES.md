@@ -5,7 +5,7 @@ Baseadas no que foi observado na Fase 2 (`docs/recon/validacao.md`) e nas avalia
 ## Do transporte (AppleScript/DoScript)
 
 - **O DoScript não devolve valores**, só o status `0`/`1`. Todo resultado passa por um arquivo temporário. Se o AE recusar o script (alerta aberto), não há arquivo, e a mensagem é genérica ("recusou o script").
-- **Um script por vez.** O AE não executa scripts em paralelo; o servidor serializa. Cada chamada custa cerca de 110 ms mais o tempo do script.
+- **Um script por vez.** O AE não executa scripts em paralelo; o servidor serializa com um lock **por processo**. Dois clientes MCP (ou o servidor e outro script) contra o mesmo AE podem colidir. Com `override` ligado, os scripts se intercalam; desligado, o AE abre um alerta modal. Use um servidor por AE. Cada chamada custa cerca de 110 ms mais o tempo do script.
 - **Timeout não cancela.** Após -1712, o script continua no AE. O servidor espera ele terminar antes de enviar outro e, enquanto isso, responde "ainda processando".
 - **Diálogos modais travam tudo.** Se houver um alerta ou diálogo aberto no AE (fontes ausentes ao abrir projeto, preferências, um `alert()`), os scripts falham até o usuário fechá-lo. O servidor não clica em diálogos: isso exigiria a permissão de Acessibilidade.
 - **AE fechado.** O servidor não abre o app; o usuário precisa abri-lo (a inicialização leva cerca de 60 s).

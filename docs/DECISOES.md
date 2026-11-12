@@ -11,3 +11,6 @@ Formato: decisão — por quê — custo se estiver errada.
 - `override true` por padrão, com fila serial e espera do marcador após timeout. — Sem override, uma colisão abre um alerta modal que trava o AE até alguém clicar (sonda 12). — Pode interromper um script de terceiros em andamento. Dá para desligar com `AE_MCP_OVERRIDE=0`.
 - O servidor não inicia o render, só enfileira. — `render()` bloqueia o AE e reproduz o cenário da sonda 12. — O usuário renderiza pelo AE ou pelo `aerender`.
 - Não abrir o AE automaticamente. — A inicialização leva cerca de 60 s, e abrir o app é uma ação visível para o usuário. — O agente precisa pedir que o usuário abra o AE.
+- `layer_type` usa `null_object` em vez de `null`. — O SDK MCP 2.x converte a string "null" em None antes da validação (avaliações t5 e t7). — Agentes que tentarem "null" recebem um erro de validação com a lista de valores.
+- `ae_queue_render` recusa e desfaz o item quando o template de saída troca a extensão pedida. — O baseline da skill mostrou que .mov virava .mp4 em silêncio e deixava um item extra na fila. — Quem quer .mov precisa escolher um template QuickTime.
+- Não há ferramenta para remover itens da fila de render nem para importar footage. — Fica fora do escopo pedido; `ae_run_extendscript` ou o usuário cobrem. — Um agente pode precisar pedir ajuda ao usuário.
