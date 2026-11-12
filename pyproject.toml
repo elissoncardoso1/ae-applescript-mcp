@@ -1,0 +1,19 @@
+[project]
+name = "ae-applescript-mcp"
+version = "0.1.0"
+description = "Servidor MCP que controla o Adobe After Effects via AppleScript (DoScript) no macOS"
+requires-python = ">=3.11"
+dependencies = ["mcp>=2.3,<3"]
+
+[project.scripts]
+ae-applescript-mcp = "ae_mcp.server:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ae_mcp"]
