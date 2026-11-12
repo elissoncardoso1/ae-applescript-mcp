@@ -95,3 +95,17 @@ Sem confirmação, chame sem esses flags. O servidor recusa com uma mensagem, e 
 Nunca chame ferramentas ae_* em paralelo: o AE executa um script por vez.
 
 Limites (o que não dá para fazer por aqui) estão em [references/limitacoes.md](references/limitacoes.md).
+
+## 7. Este servidor ou o EffectCraft?
+
+Os dois imitam o After Effects, mas não trocam arquivos (`.aep` × `.ecproj`). Use **ae_*** quando:
+- o resultado precisa ser um `.aep`;
+- o usuário já tem o projeto no AE;
+- a peça depende de plug-ins da Adobe.
+
+Use o **EffectCraft** (`mcp__effectcraft__*`, skill `effectcraft-motion`) quando:
+- o agente precisa ver frames;
+- a entrega é o vídeo renderizado, com alpha, ou em Lottie;
+- não há AE disponível.
+
+Comparação completa: `docs/comparacao-effectcraft.md` do repositório.
