@@ -117,3 +117,33 @@ def test_detailed_inspect_shows_effect_params_and_text_size(comp):
     assert fill["name"] == "Fill" and fill["params"]["Color"] == "#F05378" and fill["params"]["Opacity"] == 0.4
     assert L[0]["size"][0] > 0  # largura visual do texto, para checar se cabe na comp
     assert s.ae_inspect_comp(comp_name=comp)["layers"][1]["effects"] == ["Fill"]  # concise continua só nomes
+
+
+def test_failed_batch_changes_nothing(comp):
+    s.ae_add_layer(layer_type="text", text="Original", name="T", comp_name=comp)
+    with pytest.raises(Exception, match="Nada foi alterado"):
+        s.ae_set_layer_properties(comp_name=comp, changes=[{"layer_index": 1, "name": "Mudou"}, {"layer_index": 99, "opacity": 1}])
+    c = s.ae_inspect_comp(comp_name=comp)
+    assert c["num_layers"] == 1 and c["layers"][0]["name"] == "T"  # o add_layer anterior continua
+
+
+def test_expressions_set_read_and_invalid_rolls_back(comp):
+    s.ae_add_layer(layer_type="null_object", comp_name=comp)
+    s.ae_set_layer_properties(comp_name=comp, changes=[{"layer_index": 1, "expressions": {"rotation": "time*90"}}])
+    props = s.ae_get_layer_properties(comp_name=comp, layer_index=1, filter="Rotation", time=1)
+    rot = [p for p in props["properties"] if p["path"].endswith("Rotation")][0]
+    assert rot["expression"] == "time*90" and rot["value"] == 90
+    with pytest.raises(Exception, match="SyntaxError"):
+        s.ae_set_layer_properties(comp_name=comp, changes=[{"layer_index": 1, "expressions": {"opacity": "isso é ruim("}}])
+    op = s.ae_get_layer_properties(comp_name=comp, layer_index=1, filter="Opacity")["properties"][0]
+    assert "expression" not in op
+
+
+def test_render_frame_returns_png(comp):
+    s.ae_add_layer(layer_type="solid", color="#F05378", comp_name=comp)
+    out = s.ae_render_frame(comp_name=comp, time=1, max_side=480)
+    img = [o for o in out if hasattr(o, "data")][0]
+    assert img.data[:8] == b"\x89PNG\r\n\x1a\n"
+    import struct
+    w, h = struct.unpack(">II", img.data[16:24])
+    assert max(w, h) == 480 and (w, h) == (270, 480)

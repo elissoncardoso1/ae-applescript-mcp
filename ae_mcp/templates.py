@@ -78,8 +78,10 @@ function __animated(group, prefix, out, detailed) {
   for (var i = 1; i <= group.numProperties; i++) {
     var p = group.property(i), path = prefix ? prefix + '/' + p.name : p.name;
     if (p.propertyType === PropertyType.PROPERTY) {
-      if (p.numKeys > 0) {
+      var ex = p.canSetExpression && p.expression ? p.expression : '';
+      if (p.numKeys > 0 || ex) {
         var o = {property: path, num_keys: p.numKeys};
+        if (ex) { o.expression = ex; if (p.expressionError) o.expression_error = p.expressionError; }
         if (detailed) { o.keyframes = []; for (var k = 1; k <= p.numKeys && k <= 20; k++) o.keyframes.push({time: __r(p.keyTime(k)), value: __r(p.keyValue(k))}); }
         out.push(o);
       }
@@ -210,6 +212,12 @@ for (i = 0; i < args.changes.length; i++) {
   if (ch.out_point !== undefined && ch.out_point !== null) l.outPoint = ch.out_point;
   if (ch.parent_index !== undefined) l.parent = ch.parent_index ? __layer(c, ch.parent_index) : null;
   if (ch.properties) for (k in ch.properties) if (ch.properties.hasOwnProperty(k)) __set(__prop(l, k), ch.properties[k], k);
+  if (ch.expressions) for (k in ch.expressions) if (ch.expressions.hasOwnProperty(k)) {
+    var ep = __prop(l, k);
+    if (!ep.canSetExpression) __err("'" + k + "' não aceita expressão.");
+    ep.expression = ch.expressions[k];
+    if (ch.expressions[k] && ep.expressionError) __err("Expressão inválida em '" + k + "': " + ep.expressionError.replace(/[\r\n\t\u25B6]+/g, ' ') + " Ex. válido: {\"rotation\": \"time*90\"}; string vazia remove a expressão.");
+  }
   if (ch.center_anchor) {
     r = l.sourceRectAtTime(Math.max(l.inPoint, 0), false);
     __set(__prop(l, 'anchor_point'), [r.left + r.width / 2, r.top + r.height / 2], 'anchor_point');
@@ -268,24 +276,25 @@ return {removed: out, num_layers: c.numLayers};
 """
 
 QUEUE_RENDER = r"""
+// Nunca chame rq.remove() aqui: desfazer um grupo com add+remove de item da fila DERRUBA o AE
+// (reproduzido em 2026-11-12). Em erro, o rollback atômico desfaz o add sozinho.
 var c = __comp(args), f = new File(args.output_path), rq, om;
 if (!f.parent || !f.parent.exists) __err("A pasta de saída não existe: " + (f.parent ? f.parent.fsName : args.output_path) + ". Crie-a ou escolha outra. Ex.: \"/Users/voce/Movies/saida.mov\"");
 if (f.exists && !args.overwrite) __err("O arquivo de saída já existe: " + f.fsName + ". Escolha outro nome ou, com a confirmação do usuário, repita com overwrite=true.");
 rq = app.project.renderQueue.items.add(c);
 if (args.render_settings_template) {
   try { rq.applyTemplate(args.render_settings_template); }
-  catch (e1) { var rt = rq.templates.join(', '); rq.remove(); __err("Template de render '" + args.render_settings_template + "' não existe. Disponíveis: " + rt); }
+  catch (e1) { var rt = rq.templates.join(', '); __err("Template de render '" + args.render_settings_template + "' não existe. Disponíveis: " + rt); }
 }
 om = rq.outputModule(1);
 if (args.output_module_template) {
   try { om.applyTemplate(args.output_module_template); }
-  catch (e2) { var t = om.templates.join(', '); rq.remove(); __err("Template de saída '" + args.output_module_template + "' não existe. Disponíveis: " + t); }
+  catch (e2) { var t = om.templates.join(', '); __err("Template de saída '" + args.output_module_template + "' não existe. Disponíveis: " + t); }
 }
 om.file = f;
 var want = (f.name.match(/\.[^.]+$/) || [''])[0].toLowerCase(), got = (om.file.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
 if (want !== got) {
   var ot = om.templates.join(', '), used = om.name;
-  rq.remove();
   __err("O template de saída '" + used + "' gera '" + got + "', não '" + want + "'. Nada foi enfileirado. Repita com output_module_template de um formato que gere " + want + " (disponíveis: " + ot + ") ou mude a extensão de output_path para " + got + ".");
 }
 return {rq_index: app.project.renderQueue.numItems, comp: c.name, status: __rqStatus(rq.status), output: om.file.fsName,
@@ -318,4 +327,33 @@ return {project_file: app.project.file ? app.project.file.fsName : null, num_ite
 
 RUN_EXTENDSCRIPT = r"""
 return eval('(function () {\n' + args.code + '\n})')();
+"""
+
+RENDER_FRAME = r"""
+var c = __comp(args), t = args.time !== undefined && args.time !== null ? args.time : c.time;
+if (t < 0 || t >= c.duration) __err("time " + t + " fora da comp '" + c.name + "' (0 a " + __r(c.duration - c.frameDuration) + " s).");
+c.saveFrameToPng(t, new File(args.png_path));  // assíncrono: o servidor espera o arquivo
+return {comp: c.name, time: __r(t), width: c.width, height: c.height};
+"""
+
+GET_LAYER_PROPERTIES = r"""
+var c = __comp(args), l = __layer(c, args.layer_index), out = [], lim = 200, total = 0;
+var f = (args.filter || '').toLowerCase(), t = args.time !== undefined && args.time !== null ? args.time : c.time;
+function walk(g, prefix) {
+  for (var i = 1; i <= g.numProperties; i++) {
+    var p = g.property(i), path = prefix ? prefix + '/' + p.name : p.name, o;
+    if (p.propertyType !== PropertyType.PROPERTY) { walk(p, path); continue; }
+    if (p.propertyValueType === PropertyValueType.NO_VALUE || (f && path.toLowerCase().indexOf(f) < 0)) continue;
+    total++;
+    if (out.length >= lim) continue;
+    o = {path: path};
+    try { o.value = p.propertyValueType === PropertyValueType.COLOR ? __hex(p.valueAtTime(t, false)) : __r(p.valueAtTime(t, false)); } catch (x) {}
+    if (p.numKeys) o.num_keys = p.numKeys;
+    if (p.canSetExpression && p.expression) { o.expression = p.expression; if (p.expressionError) o.expression_error = p.expressionError; }
+    out.push(o);
+  }
+}
+walk(l, '');
+return {layer_index: l.index, layer: l.name, time: __r(t), properties: out, truncated: total > lim,
+        hint: total > lim ? 'Mostrando ' + lim + ' de ' + total + ' propriedades; use filter (ex.: "Transform", "Effects/Gaussian Blur").' : undefined};
 """

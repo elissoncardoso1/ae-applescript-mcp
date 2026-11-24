@@ -44,8 +44,16 @@ def build_script(template: str, args: dict, result_path: str, undo: str | None =
     args_lit = json.dumps(args, ensure_ascii=True)
     body = template
     if undo:
+        # Atômico: o sentinela garante que o grupo vira um passo de undo (grupo vazio não vira,
+        # e o undo desfaria a ação ANTERIOR do usuário). Em erro, um undo desfaz só este grupo.
         body = (f"app.beginUndoGroup({json.dumps('MCP: ' + undo)});\n"
-                f"try {{\n{template}\n}} finally {{ app.endUndoGroup(); }}")
+                "app.project.items.addFolder('__mcp_tx').remove();\n"
+                "var __closed = false;\n"
+                f"try {{\n{template}\n}} catch (__e) {{\n"
+                "  app.endUndoGroup(); __closed = true; app.executeCommand(16);\n"
+                "  var __m = String(__e && __e.message !== undefined ? __e.message : __e);\n"
+                "  throw new Error(__m + ' (Nada foi alterado: a operação inteira foi desfeita.)');\n"
+                "} finally { if (!__closed) app.endUndoGroup(); }")
     return f"""{PRELUDE}
 {helpers}
 (function () {{

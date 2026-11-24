@@ -1,8 +1,13 @@
 """Servidor MCP: controla o Adobe After Effects via AppleScript (DoScript) no macOS."""
+import json
 import os
+import subprocess
+import time as time_mod
+import uuid
 from typing import Annotated, Literal
 
 from mcp.server import MCPServer
+from mcp.server.mcpserver import Image
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
@@ -64,6 +69,41 @@ def ae_inspect_comp(comp_name: CompName = None, comp_index: CompIndex = None,
     return _run(T.INSPECT_COMP, {**_target(comp_name, comp_index), "detailed": response_format == "detailed"})
 
 
+@mcp.tool(annotations=READ)
+def ae_get_layer_properties(layer_index: Annotated[int, Field(ge=1)],
+                            comp_name: CompName = None, comp_index: CompIndex = None,
+                            filter: Annotated[str | None, Field(description="Trecho do caminho, ex.: 'Opacity', 'Effects/Gaussian Blur'")] = None,
+                            time: Annotated[float | None, Field(ge=0, description="Segundos; padrão = tempo atual da comp")] = None) -> dict:
+    """Lista as propriedades de uma camada como caminhos planos ('Transform/Opacity',
+    'Effects/Gaussian Blur/Blurriness'…) com valor no tempo, nº de keyframes e expressão.
+    Use para descobrir o caminho exato a passar em properties/expressions/ae_set_keyframes (até 200)."""
+    return _run(T.GET_LAYER_PROPERTIES, {**locals(), **_target(comp_name, comp_index)})
+
+
+@mcp.tool(annotations=READ)
+def ae_render_frame(comp_name: CompName = None, comp_index: CompIndex = None,
+                    time: Annotated[float | None, Field(ge=0, description="Segundos; padrão = tempo atual da comp")] = None,
+                    max_side: Annotated[int, Field(ge=64, le=4096, description="Lado maior da imagem devolvida")] = 960) -> list:
+    """Renderiza UM frame da comp e devolve a imagem (PNG) para você OLHAR o resultado:
+    texto cortado, sobreposição, cores, enquadramento. Não grava nada no projeto."""
+    png = os.path.join(runner._dir, uuid.uuid4().hex + ".png")
+    info = _run(T.RENDER_FRAME, {**_target(comp_name, comp_index), "time": time, "png_path": png})
+    deadline, last = time_mod.monotonic() + runner.timeout, -1
+    while True:  # saveFrameToPng é assíncrono: espera o arquivo parar de crescer
+        size = os.path.getsize(png) if os.path.exists(png) else -1
+        if size > 0 and size == last:
+            break
+        if time_mod.monotonic() > deadline:
+            raise ToolError("O After Effects não terminou de gerar o frame a tempo. Tente de novo com max_side menor.")
+        last = size
+        time_mod.sleep(0.25)
+    if max(info["width"], info["height"]) > max_side:
+        subprocess.run(["sips", "-Z", str(max_side), png], capture_output=True, check=True)
+    data = open(png, "rb").read()
+    os.remove(png)
+    return [json.dumps(info, ensure_ascii=False), Image(data=data, format="png")]
+
+
 @mcp.tool(annotations=ADD)
 def ae_create_comp(name: Annotated[str, Field(min_length=1)],
                    width: Annotated[int, Field(ge=4, le=30000)], height: Annotated[int, Field(ge=4, le=30000)],
@@ -107,6 +147,8 @@ class LayerChange(BaseModel):
     justification: Literal["left", "center", "right"] | None = None
     parent_index: int | None = Field(None, ge=0, description="0 remove o pai")
     center_anchor: bool | None = Field(None, description="Põe a âncora no centro visual da camada (útil para centralizar texto).")
+    expressions: dict[str, str] | None = Field(
+        None, description='Caminho → expressão do AE, ex.: {"rotation": "time*90", "Transform/Position": "wiggle(2,20)"}; "" remove. Expressão inválida desfaz o lote inteiro.')
     properties: dict[str, float | list[float] | str] | None = Field(
         None, description='Caminho → valor, ex.: {"Effects/Gaussian Blur/Blurriness": 20}')
 

@@ -28,4 +28,4 @@ async def _list():
 
 def test_tool_count_and_prefix():
     tools = anyio.run(lambda: _list())
-    assert len(tools) == 13 and all(n.startswith("ae_") for n in tools)
+    assert len(tools) == 15 and all(n.startswith("ae_") for n in tools)

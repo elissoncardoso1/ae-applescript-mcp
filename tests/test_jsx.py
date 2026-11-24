@@ -17,7 +17,9 @@ File.prototype.open = function () { return true; };
 File.prototype.write = function (s) { this.buf += s; };
 File.prototype.close = function () { __files[this.p] = this.buf; };
 var app = { beginUndoGroup: function (n) { __calls.push('begin:' + n); },
-            endUndoGroup: function () { __calls.push('end'); } };
+            endUndoGroup: function () { __calls.push('end'); },
+            executeCommand: function (id) { __calls.push('cmd:' + id); },
+            project: {items: {addFolder: function () { __calls.push('sentinel'); return {remove: function () {}}; }}} };
 """
 
 
@@ -57,6 +59,13 @@ def test_template_error_becomes_structured_error():
     assert res["ok"] is False and res["error"]["message"] == "falhou aqui"
 
 
-def test_undo_group_closes_even_on_error():
-    _, calls = run_script("throw new Error('x');", {}, undo="Criar comp")
-    assert calls == ["begin:MCP: Criar comp", "end"]
+def test_failed_write_is_rolled_back_with_one_undo():
+    res, calls = run_script("throw new Error('x');", {}, undo="Criar comp")
+    # sentinela garante que o grupo registra um passo; o undo desfaz só este grupo
+    assert calls == ["begin:MCP: Criar comp", "sentinel", "end", "cmd:16"]
+    assert "Nada foi alterado" in res["error"]["message"]
+
+
+def test_successful_write_is_not_undone():
+    res, calls = run_script("return 1;", {}, undo="Criar comp")
+    assert res == {"ok": True, "data": 1} and calls == ["begin:MCP: Criar comp", "sentinel", "end"]
